@@ -79,13 +79,19 @@ class RunCommand extends Command {
     const proc = localServer.run({ port, isBackground: true });
     
     let isConnected = false;
+    let isShutdown = false;
     proc.stdout.on('data', data => {
       const message = data.toString();
-      if (message.includes(`*** Listening on localhost:${port}`)) {
+    
+
+      if (message.includes(`*** Listening on localhost:${port}`) || message.includes(`listening on port ${port}`)) {
         isConnected = true;
       }
-    });
-
+      if (message.includes(`Shutdown`)) {
+        isShutdown = true;
+      }
+    })        
+  
     // Wait for connection or timeout
     await Promise.race([
       (async () => {
@@ -103,6 +109,24 @@ class RunCommand extends Command {
           await sleep(1);
         }
         return true;
+      })()
+    ]);
+
+    // Watch for server shutdown
+    await Promise.race([
+      (async () => {
+        await sleep(timeout);
+        return true;
+      })(),
+      (async () => {
+        while (!isShutdown) {
+          await sleep(1);
+        }
+        await killProcess(proc.pid);
+        throw new Error(
+          `Server shutdown unexpectedly after starting up.\n` +
+          `Try running "funct serve" to understand if server can launch correctly.`
+        );
       })()
     ]);
 
